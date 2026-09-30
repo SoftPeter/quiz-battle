@@ -158,7 +158,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{ outline:3px sol
 <div class="toast" id="toast"></div>
 
 <script>
-const LIMIT = 180, PER = 3, POLL = 1000, SKEY = "quizBattle.me";
+const LIMIT = 180, PER = 3, POLL = 1500, SKEY = "quizBattle.me";
 const $ = (id) => document.getElementById(id);
 let me = { code: "", name: "" };
 let R = null, offset = 0, pollH = null, lastCurId = null, lastEvent = 0, buzzed = null, errCount = 0;
@@ -190,9 +190,9 @@ async function poll() {
     if (++errCount > 2) $("net").classList.remove("hide");
   }
 }
-function startPoll() { stopPoll(); poll(); pollH = setInterval(poll, POLL); }
+function startPoll() { stopPoll(); if (document.hidden) return; poll(); pollH = setInterval(poll, POLL); }
 function stopPoll() { if (pollH) clearInterval(pollH); pollH = null; }
-document.addEventListener("visibilitychange", () => { if (!document.hidden && me.code) poll(); });
+document.addEventListener("visibilitychange", () => { if (document.hidden) stopPoll(); else if (me.code) startPoll(); });
 
 /* 홈 */
 $("myName").value = me.name || "";
