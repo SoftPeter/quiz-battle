@@ -97,17 +97,9 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{ outline:3px sol
     <h2>참가자</h2>
     <ul class="plist" id="lobbyPlayers"></ul>
   </div>
-  <div class="box">
-    <h2>풀 문제 수</h2>
-    <div class="row hide" id="limitEdit">
-      <input id="limitInput" type="number" inputmode="numeric" min="1" max="60" style="flex:2">
-      <button id="limitBtn">저장</button>
-    </div>
-    <p class="sub" id="limitInfo" style="margin:8px 0 0"></p>
-  </div>
   <div class="box" id="quizForm">
-    <h2>내 퀴즈 (1~3개)</h2>
-    <p class="sub">1개만 써도 돼. 정답은 내 퀴즈가 뽑혔을 때 내 폰에만 보여.</p>
+    <h2>내 퀴즈 2개</h2>
+    <p class="sub" id="needInfo"></p>
     <div id="fields"></div>
     <button class="full" id="submitBtn" style="margin-top:14px">퀴즈 제출</button>
   </div>
@@ -174,7 +166,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{ outline:3px sol
 <div class="toast" id="toast"></div>
 
 <script>
-const LIMIT = 180, PER = 3, POLL = 1500, SKEY = "quizBattle.me";
+const LIMIT = 180, PER = 2, POLL = 1500, SKEY = "quizBattle.me";
 const $ = (id) => document.getElementById(id);
 let me = { code: "", name: "" };
 let R = null, offset = 0, pollH = null, lastCurId = null, lastEvent = 0, buzzed = null, errCount = 0;
@@ -231,7 +223,7 @@ function leave() { stopPoll(); me.code = ""; R = null; remember(); history.repla
 $("leaveBtn").onclick = leave;
 
 /* 로비 */
-let f = ""; for (let i = 0; i < PER; i++) f += `<label for="q${i}">퀴즈 ${i+1}${i ? " (선택)" : ""}</label><textarea id="q${i}" maxlength="200" placeholder="예: 내 카톡에 은영이는 뭐라고 저장돼 있게?"></textarea><label for="a${i}">정답</label><input id="a${i}" maxlength="100">`;
+let f = ""; for (let i = 0; i < PER; i++) f += `<label for="q${i}">퀴즈 ${i+1}</label><textarea id="q${i}" maxlength="200" placeholder="예: 내 카톡에 은영이는 뭐라고 저장돼 있게?"></textarea><label for="a${i}">정답</label><input id="a${i}" maxlength="100">`;
 $("fields").innerHTML = f;
 let editing = false;
 $("submitBtn").onclick = async () => {
@@ -240,13 +232,11 @@ $("submitBtn").onclick = async () => {
     const q = $("q"+i).value.trim();
     if (q) quizzes.push({ q, a: $("a"+i).value.trim() });
   }
-  if (!quizzes.length) { toast("퀴즈 최소 1개는 써줘"); $("q0").focus(); return; }
+  if (quizzes.length < PER) { toast(`퀴즈 ${PER}개 다 써줘`); return; }
   editing = false; await act("submit", { quizzes });
 };
 $("editBtn").onclick = () => { editing = true; render(); };
 $("startBtn").onclick = () => act("start");
-$("limitBtn").onclick = () => act("setLimit", { limit: Number($("limitInput").value) });
-$("limitInput").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); $("limitBtn").click(); } };
 $("shareBtn").onclick = async () => {
   const url = `${location.origin}${location.pathname}?room=${me.code}`;
   try { if (navigator.share) await navigator.share({ title: "퀴즈 뽑기 배틀", text: `방 코드 ${me.code}`, url }); else { await navigator.clipboard.writeText(url); toast("링크 복사했어"); } } catch (e) {}
@@ -279,17 +269,13 @@ function render() {
   if (R.phase === "lobby") {
     show("s-lobby");
     $("lobbyCode").textContent = R.code;
-    $("lobbyPlayers").innerHTML = R.players.map((p) => `<li><span>${esc(p.name)}${p.name === R.host ? " · 방장" : ""}${p.name === me.name ? " (나)" : ""}</span><span class="tag ${p.submitted ? "ok" : ""}">${p.submitted ? "제출" : "작성 중"}</span></li>`).join("");
-    $("limitEdit").classList.toggle("hide", !isHost);
-    if (document.activeElement !== $("limitInput")) $("limitInput").value = R.limit;
-    $("limitInfo").textContent = R.total < R.limit
-      ? `${R.limit}문제로 설정 · 지금 제출된 퀴즈가 ${R.total}개라 ${R.total}문제만 진행돼`
-      : `제출된 퀴즈 ${R.total}개 중 ${R.limit}문제 랜덤 진행`;
-    const done = mine && mine.submitted && !editing;
+    $("lobbyPlayers").innerHTML = R.players.map((p) => `<li><span>${esc(p.name)}${p.name === R.host ? " · 방장" : ""}${p.name === me.name ? " (나)" : ""}</span><span class="tag ${p.count >= R.rounds ? "ok" : ""}">${!p.submitted ? "작성 중" : p.count >= R.rounds ? `제출 ${p.count}개` : `${R.rounds - p.count}개 더 필요`}</span></li>`).join("");
+    $("needInfo").textContent = `${R.players.length}명 × 2문제 = 총 ${R.goal}문제. 정답은 내 퀴즈가 뽑혔을 때 내 폰에만 보여.`;
+    const done = mine && mine.submitted && mine.count >= R.rounds && !editing;
     $("quizForm").classList.toggle("hide", done);
     $("quizDone").classList.toggle("hide", !done);
     $("startBtn").classList.toggle("hide", !isHost);
-    $("startBtn").disabled = R.players.length < 2 || R.players.some((p) => !p.submitted);
+    $("startBtn").disabled = R.players.length < 2 || R.players.some((p) => p.count < R.rounds);
     $("lobbyWait").classList.toggle("hide", isHost);
     return;
   }
