@@ -8,7 +8,8 @@ const redis = new Redis({
 });
 
 const TTL = 60 * 60 * 12; // 방은 12시간 뒤 자동 삭제
-const PER = 3;            // 1인당 퀴즈 수
+const PER = 3;            // 1인당 최대 퀴즈 수 (최소 1개)
+const DEF_LIMIT = 10;     // 풀 문제 수 기본값
 const REVEAL = 3000;      // 뽑고 3초 뒤 모든 폰에 동시 공개
 const key = (c) => `qb:${c}`;
 const clean = (s, n) => String(s ?? "").trim().slice(0, n);
@@ -39,6 +40,7 @@ async function update(c, fn) {
 }
 
 const pool = (st) => Object.entries(st.quiz).flatMap(([n, l]) => l.map((_, i) => `${n}#${i}`));
+const goal = (st) => Math.min(st.limit || DEF_LIMIT, pool(st).length); // 실제 진행 문제 수
 
 function view(c, st, me) {
   const all = pool(st);
@@ -47,7 +49,9 @@ function view(c, st, me) {
     host: st.host,
     phase: st.phase,
     total: all.length,
-    remaining: all.filter((id) => !st.used.includes(id)).length,
+    limit: st.limit || DEF_LIMIT,
+    goal: goal(st),
+    remaining: Math.max(0, goal(st) - st.used.length),
     canUndo: st.history.length > 0,
     last: st.last,
     cur: st.cur ? { id: st.cur.id, by: st.cur.by, q: st.cur.q, startedAt: st.cur.startedAt, a: st.cur.by === me ? st.cur.a : undefined } : null,
@@ -67,9 +71,16 @@ const actions = {
   submit(st, name, b) {
     if (!st.players.includes(name)) throw new Fail("방에 먼저 들어와줘");
     if (st.phase !== "lobby") throw new Fail("게임 시작 후엔 수정 못 해");
-    const list = (b.quizzes || []).slice(0, PER).map((x) => ({ q: clean(x.q, 200), a: clean(x.a, 100) }));
-    if (list.length !== PER || list.some((x) => !x.q)) throw new Fail(`퀴즈 ${PER}개 다 채워줘`);
+    const list = (b.quizzes || []).map((x) => ({ q: clean(x.q, 200), a: clean(x.a, 100) })).filter((x) => x.q).slice(0, PER);
+    if (!list.length) throw new Fail("퀴즈 최소 1개는 써줘");
     st.quiz[name] = list;
+  },
+  setLimit(st, name, b) {
+    if (name !== st.host) throw new Fail("방장만 바꿀 수 있어", 403);
+    if (st.phase !== "lobby") throw new Fail("게임 시작 후엔 못 바꿔");
+    const n = Math.floor(Number(b.limit));
+    if (!(n >= 1 && n <= 60)) throw new Fail("1~60 사이로 입력해줘");
+    st.limit = n;
   },
   start(st, name) {
     if (name !== st.host) throw new Fail("방장만 시작할 수 있어", 403);
@@ -80,6 +91,7 @@ const actions = {
   draw(st, name) {
     if (name !== st.host) throw new Fail("방장만 뽑을 수 있어", 403);
     if (st.phase !== "play" || st.cur) throw new Fail("지금은 뽑을 수 없어");
+    if (st.used.length >= goal(st)) throw new Fail("정한 문제 수를 다 풀었어");
     const left = pool(st).filter((id) => !st.used.includes(id));
     if (!left.length) throw new Fail("남은 퀴즈가 없어");
     const id = left[Math.floor(Math.random() * left.length)];
@@ -98,7 +110,7 @@ const actions = {
     st.used.push(st.cur.id);
     st.last = { t: Date.now(), text: winner ? `${winner} +1점` : `${st.cur.by} -1점 (아무도 못 맞힘)` };
     st.cur = null;
-    if (st.used.length >= pool(st).length) st.phase = "result";
+    if (st.used.length >= goal(st)) st.phase = "result";
   },
   undo(st, name) {
     if (name !== st.host) throw new Fail("방장만 되돌릴 수 있어", 403);
@@ -134,7 +146,7 @@ export default async function handler(req, res) {
     if (!name) throw new Fail("이름을 입력해줘");
 
     if (b.action === "create") {
-      const st = { host: name, phase: "lobby", players: [name], quiz: {}, score: { [name]: 0 }, cur: null, used: [], history: [], last: null };
+      const st = { host: name, phase: "lobby", limit: DEF_LIMIT, players: [name], quiz: {}, score: { [name]: 0 }, cur: null, used: [], history: [], last: null };
       for (let i = 0; i < 10; i++) {
         const c = String(Math.floor(1000 + Math.random() * 9000));
         const ok = await redis.set(key(c), JSON.stringify(st), { nx: true, ex: TTL });
