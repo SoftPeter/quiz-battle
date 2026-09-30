@@ -88,7 +88,7 @@ const actions = {
   },
   resolve(st, name, b) {
     if (!st.cur || b.id !== st.cur.id) throw new Fail("이미 처리된 퀴즈야", 409);
-    if (name !== st.cur.by && name !== st.host) throw new Fail("출제자만 판정할 수 있어", 403);
+    if (name !== st.cur.by) throw new Fail("출제자만 판정할 수 있어", 403);
     const winner = b.winner ? clean(b.winner, 10) : null;
     if (winner && (!st.players.includes(winner) || winner === st.cur.by)) throw new Fail("정답자를 다시 골라줘");
     const target = winner || st.cur.by;

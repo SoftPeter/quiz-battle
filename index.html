@@ -289,7 +289,7 @@ function render() {
         $("qBy").textContent = `출제자 ${c.by}`;
         $("qText").textContent = c.q;
         const t = $("ticket"); t.classList.remove("pop"); void t.offsetWidth; t.classList.add("pop");
-        const judge = c.by === me.name || isHost;
+        const judge = c.by === me.name;
         $("judge").classList.toggle("hide", !judge);
         $("judgeWait").classList.toggle("hide", judge);
         $("answerers").innerHTML = R.players.filter((p) => p.name !== c.by)
