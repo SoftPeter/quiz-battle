@@ -9,6 +9,7 @@ const redis = new Redis({
 
 const TTL = 60 * 60 * 12; // 방은 12시간 뒤 자동 삭제
 const PER = 3;            // 1인당 퀴즈 수
+const REVEAL = 3000;      // 뽑고 3초 뒤 모든 폰에 동시 공개
 const key = (c) => `qb:${c}`;
 const clean = (s, n) => String(s ?? "").trim().slice(0, n);
 
@@ -72,7 +73,7 @@ const actions = {
   },
   start(st, name) {
     if (name !== st.host) throw new Fail("방장만 시작할 수 있어", 403);
-    if (Object.keys(st.quiz).length < 2) throw new Fail("퀴즈 낸 사람이 2명 이상이어야 해");
+    if (st.players.length < 2) throw new Fail("2명 이상이어야 시작할 수 있어"); const wait = st.players.filter((n) => !st.quiz[n]); if (wait.length) throw new Fail(wait.join(", ") + " 아직 작성 중이야");
     st.phase = "play";
     st.last = null;
   },
@@ -84,7 +85,7 @@ const actions = {
     const id = left[Math.floor(Math.random() * left.length)];
     const cut = id.lastIndexOf("#");
     const by = id.slice(0, cut), item = st.quiz[by][Number(id.slice(cut + 1))];
-    st.cur = { id, by, q: item.q, a: item.a, startedAt: Date.now() };
+    st.cur = { id, by, q: item.q, a: item.a, startedAt: Date.now() + REVEAL };
   },
   resolve(st, name, b) {
     if (!st.cur || b.id !== st.cur.id) throw new Fail("이미 처리된 퀴즈야", 409);
